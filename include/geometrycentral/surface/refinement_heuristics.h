@@ -1,9 +1,10 @@
 // --------------------------------------------------------------------------
 // Delaunay refinement heuristics
 //
-// Goal: for meshes with few vertices (nVertices ≈ k), grow toward targetN = 4*k vertices
-// by driving a global circumradius criterion.  Angle quality is relaxed smoothly
-// as n grows and refinement is disabled entirely for large meshes (n ≥ 8192).
+// Goal: for meshes with few vertices (nVertices ≈ k), grow toward
+// targetN = min(4*k, 128) vertices by driving a global circumradius criterion.
+// Angle quality is relaxed smoothly as n grows and refinement is disabled
+// entirely for large meshes (n ≥ 8192).
 //
 // ── angleThreshDegrees ────────────────────────────────────────────────────
 //
@@ -37,10 +38,10 @@
 //        ▲
 //    ∞   ┤        x x x x
 //        │        x
-//  s/√4k ┤x x x x x
+//  s/√tN ┤x x x x x            tN = min(4k, 128)
 //     0  ┤
 //        └────────┬───────▶ n
-//             targetN = 4k
+//               targetN
 //
 // --------------------------------------------------------------------------
 #pragma once
@@ -53,7 +54,8 @@
 namespace geometrycentral {
 namespace surface {
 
-static constexpr int REFINE_TARGET_FACTOR = 4; // targetN = REFINE_TARGET_FACTOR * k
+static constexpr size_t REFINE_TARGET_FACTOR = 4;   // targetN = REFINE_TARGET_FACTOR * k
+static constexpr size_t REFINE_TARGET_MAX    = 128; // cap targetN to avoid over-refinement
 
 // Linear interpolation, clamped to [x0, x1].
 inline double lerpClamped(double x, double x0, double x1, double y0, double y1)
@@ -80,12 +82,12 @@ inline std::optional<double> computeRefinementAngleThresh(size_t nVertices)
     return lerpClamped(static_cast<double>(nVertices), 4096.0, 8192.0, 15.0, 0.0);
 }
 
-// Absolute circumradius threshold that drives the mesh toward targetN vertices.
+// Absolute circumradius threshold that drives the mesh toward targetN = min(4k, 128) vertices.
 // shapeLengthScale = sqrt(totalArea), so sqrt(A / targetN) = shapeLengthScale / sqrt(targetN).
 // Returns infinity when the mesh already has >= targetN vertices (only angle quality then matters).
 inline double computeRefinementCircumradiusThresh(size_t nVertices, size_t k, double shapeLengthScale)
 {
-    const size_t targetN = static_cast<size_t>(REFINE_TARGET_FACTOR) * k;
+    const size_t targetN = std::min(REFINE_TARGET_FACTOR * k, REFINE_TARGET_MAX);
     if (nVertices >= targetN)
         return std::numeric_limits<double>::infinity();
     return shapeLengthScale / std::sqrt(static_cast<double>(targetN));
